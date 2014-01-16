@@ -28,9 +28,46 @@ import SocketServer
 
 # try: curl -v -X GET http://127.0.0.1:8080/
 
+
+# Example of a HTTP request
+'''
+GET /path/file.html HTTP/1.0
+From: someuser@jmarshall.com
+User-Agent: HTTPTool/1.0
+[blank line here]
+'''
+# and an exmaple of a HTTP response
+'''
+HTTP/1.0 200 OK
+Date: Fri, 31 Dec 1999 23:59:59 GMT
+Content-Type: text/html
+Content-Length: 1354
+
+<html>
+<body>
+<h1>Happy New Millennium!</h1>
+(more file contents)
+  .
+    .
+      .
+</body>
+</html>
+'''
+
+HTTP_VERSION = "HTTP/1.1"
+END_LINE = "\r\n"
+
 class MyWebServer(SocketServer.BaseRequestHandler):
 
     def handle(self):
+        # I want this dict to have the following values, to be used to contruct the response later
+        # 1 return code: depending on what is the result of the path
+        # 2 return text: To follow the return code
+        # 3 Date: time that the response is returned
+        # 4 content-type: either text/html if a html file, or test/css if its a css file
+        # optional content length?
+        # the result from reading the file, if one was found (the contents of index.html)
+        self.responseDict = {}
         self.data = self.request.recv(1024).strip()
         #print ("Got a request of: %s\n" % self.data)
         print ("Got a request")
@@ -39,50 +76,137 @@ class MyWebServer(SocketServer.BaseRequestHandler):
             print (line)
         requestHeader = lines[0]
         tokens = requestHeader.split(" ")
-        print ("tokens of the request header are as follows")
-        for token in tokens:
-            print (token)
-        method = tokens[0]
+        #print ("tokens of the request header are as follows")
+        #for token in tokens:
+        #    print (token)
+        #method = tokens[0]
         path = tokens[1]
-        http = tokens[2]
-        # I want to get all the directories listed where the web server is hosted
-        wwwDir = self.getWWWDirectoryIfItExists()
-        if wwwDir:
-            # Gotta look for the index.html OR serve the 303 file
-            #self.request.sendall("www dir found, need to see if index.html exists")
-            if self.doesIndexExist(wwwDir):
-                # server the index page as the reponse
-                #self.request.sendall("Found index.html, time to serve it")
-                try:
-                    f = open(os.path.join(wwwDir, "index.html"))
-                    fileContents = f.read()
-                    self.request.sendall(fileContents)
-                except:
-                    self.request.sendall("Failed to open index.html")
-                    raise Exception("Stuff is broken!")
-                finally:
-                    if f:
-                        f.close()
-            else:
-                # serve a missing file warning, 303, etc
-                self.request.sendall("No index.html found")
+        #http = tokens[2]
+
+        if self.generateResponseFromPath(path):
+            httpResponse = self.buildResponse()
         else:
-            # Report as error since there is no www dir being served
-            self.request.sendall("No www dir located in current working directory")
-        self.request.sendall("OK")
+            httpResponse = self.build404()
+        self.request.sendall(httpResponse)
 
-    def getWWWDirectoryIfItExists(self):
-        cwd = os.getcwd()
-        wwwDir = os.path.join(cwd, "www")
-        if os.path.exists(wwwDir) and os.path.isdir(wwwDir):
-            return wwwDir
-        return None
+    def generateResponseFromPath(self, path):
 
-    def doesIndexExist(self, wwwDir):
-        indexPath = os.path.join(wwwDir, "index.html")
-        if os.path.exists(indexPath) and os.path.isfile(indexPath):
+        wwwDirPath = os.path.join(os.getcwd(), "www")
+        # first need to check the path
+        if path.endswith('/'): # this could probably be changed to "endswith" and cover more cases
+            # This is a directory, so we need to serve index.html from this directory if it exists
+            if path == '/':
+                indexPath = os.path.join(wwwDirPath, "index.html")
+            else:
+                indexPath = os.path.join(wwwDirPath, path.lstrip('/'), "index.html")
+            if not self.checkPath(indexPath, wwwDirPath):
+                print "Found out the path doesnt exist, or its trying to access something it should be"
+                return False
+            if os.path.exists(indexPath) and os.path.isfile(indexPath):
+                # read the file, get the contexts and save it in the response dict
+                try:
+                    indexFile = open(indexPath)
+                    fileContents = indexFile.read()
+                    self.responseDict["body"] = fileContents
+                    indexFile.close()
+                    self.responseDict["return-code"] = "200 OK"
+                    self.responseDict["content-type"] = "Content-Type: text/html"
+                    return True
+                except:
+                    return False
+            else: # the file doesnt exsist, need to return the proper error code and return
+                return False
+        # now we know we arent dealing with a directory, so it much be a file (if it is in fact a valid url)
+        elif path.endswith(".html"):
+            print "detected a .html file"
+            print "wwwDirPath: %s" % wwwDirPath
+            print "path: %s" % path
+            htmlPath = os.path.join(wwwDirPath, path.lstrip('/'))
+            print "html path file path is: %s" % htmlPath
+            if not self.checkPath(htmlPath, wwwDirPath):
+                return False
+            if os.path.exists(htmlPath) and os.path.isfile(htmlPath):
+                # read the file, get the contexts and save it in the response dict
+                try:
+                    htmlFile = open(htmlPath)
+                    fileContents = htmlFile.read()
+                    self.responseDict["body"] = fileContents
+                    htmlFile.close()
+                    self.responseDict["return-code"] = "200 OK"
+                    self.responseDict["content-type"] = "Content-Type: text/html"
+                    return True
+                except:
+                    return False
+            else: # html file doesnt exsist, need to return proper error code
+                return False
+        elif path.endswith(".css"):
+            print "detected a .css file"
+            print "wwwDirPath: %s" % wwwDirPath
+            print "path: %s" % path
+            cssPath = os.path.join(wwwDirPath, path.lstrip('/'))
+            print "css path file path is: %s" % cssPath
+            if not self.checkPath(cssPath, wwwDirPath):
+                return False
+            if os.path.exists(cssPath) and os.path.isfile(cssPath):
+                # read the file, get the contexts and save it in the response dict
+                try:
+                    cssFile = open(cssPath)
+                    fileContents = cssFile.read()
+                    self.responseDict["body"] = fileContents
+                    cssFile.close()
+                    self.responseDict["return-code"] = "200 OK"
+                    self.responseDict["content-type"] = "Content-Type: text/css"
+                    return True
+                except:
+                    return False
+            else: # css file doesnt exsist, need to return proper error code
+                return False
+        # we have enhaused what our server can provide, need to return a failed request back to the client
+        else:
+            return False
+
+    def checkPath(self, path, basePath):
+        if os.path.abspath(path).startswith(basePath):
             return True
         return False
+
+    def buildResponse(self):
+        """
+        using the response dict filled earlier build and return the http response
+
+        # form of a good http repsonse
+        httpResponse = ""
+        httpResponse += "HTTP/1.0 200 OK\r\n"
+        httpResponse += "HTTP/1.0 404\r\n"
+        httpResponse += "Date: Fri, 31 Dec 1999 23:59:59 GMT\r\n"
+        httpResponse += "Content-Type: text/css\r\n"
+        httpResponse += "\r\n"
+        print httpResponse
+        self.request.sendall(httpResponse)
+        """
+        httpResponse = ""
+        httpResponse += HTTP_VERSION
+        httpResponse += " "
+        httpResponse += self.responseDict["return-code"]
+        httpResponse += END_LINE
+        httpResponse += self.responseDict["content-type"]
+        httpResponse += END_LINE
+        httpResponse += END_LINE
+        httpResponse += self.responseDict["body"]
+        print "http reponse"
+        print httpResponse
+        return httpResponse
+
+    def build404(self):
+        httpResponse = ""
+        httpResponse += HTTP_VERSION
+        httpResponse += " "
+        httpResponse += "404 Not Found"
+        httpResponse += END_LINE
+        httpResponse += END_LINE
+        print "http reponse"
+        print httpResponse
+        return httpResponse
 
 
 if __name__ == "__main__":
