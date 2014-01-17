@@ -162,6 +162,8 @@ class MyWebServer(SocketServer.BaseRequestHandler):
             else: # css file doesnt exsist, need to return proper error code
                 return False
         # we have enhaused what our server can provide, need to return a failed request back to the client
+	# TODO onc last case to catch. Need to handle the case of http://127.0.0.1:8080/deep without the trailing '/'
+	# supposed to serve the index.html from that directory
         else:
             return False
 
