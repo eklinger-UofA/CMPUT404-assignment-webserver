@@ -60,28 +60,15 @@ END_LINE = "\r\n"
 class MyWebServer(SocketServer.BaseRequestHandler):
 
     def handle(self):
-        # I want this dict to have the following values, to be used to contruct the response later
-        # 1 return code: depending on what is the result of the path
-        # 2 return text: To follow the return code
-        # 3 Date: time that the response is returned
-        # 4 content-type: either text/html if a html file, or test/css if its a css file
-        # optional content length?
-        # the result from reading the file, if one was found (the contents of index.html)
         self.responseDict = {}
         self.data = self.request.recv(1024).strip()
-        #print ("Got a request of: %s\n" % self.data)
         print ("Got a request")
         lines = self.data.splitlines()
         for line in lines:
             print (line)
         requestHeader = lines[0]
         tokens = requestHeader.split(" ")
-        #print ("tokens of the request header are as follows")
-        #for token in tokens:
-        #    print (token)
-        #method = tokens[0]
         path = tokens[1]
-        #http = tokens[2]
 
         if self.generateResponseFromPath(path):
             httpResponse = self.buildResponse()
@@ -92,8 +79,7 @@ class MyWebServer(SocketServer.BaseRequestHandler):
     def generateResponseFromPath(self, path):
 
         wwwDirPath = os.path.join(os.getcwd(), "www")
-        # first need to check the path
-        # MOVE this to the bottom as an else
+	"""
         if path.endswith('/'): # this could probably be changed to "endswith" and cover more cases
             # This is a directory, so we need to serve index.html from this directory if it exists
             if path == '/':
@@ -119,7 +105,8 @@ class MyWebServer(SocketServer.BaseRequestHandler):
             else: # the file doesnt exsist, need to return the proper error code and return
                 return False
         # now we know we arent dealing with a directory, so it much be a file (if it is in fact a valid url)
-        elif path.endswith(".html"):
+	"""
+        if path.endswith(".html"):
             print "detected a .html file"
             print "wwwDirPath: %s" % wwwDirPath
             print "path: %s" % path
@@ -167,14 +154,20 @@ class MyWebServer(SocketServer.BaseRequestHandler):
 	# TODO onc last case to catch. Need to handle the case of http://127.0.0.1:8080/deep without the trailing '/'
 	# supposed to serve the index.html from that directory
         else:
-            # means one of two things. Either the path leads to a directory
-            filePath = os.path.join(wwwDirPath, path.lstrip('/'))
-            if os.path.exists(filePath) and os.path.isDirectory(filePath):
-                # serve the index.html from this file
-                pass
-            # OR
-            # it doesn't exist and we should 404
-            else:
+            indexPath = os.path.join(wwwDirPath, path.lstrip('/'), "index.html")
+            if os.path.exists(indexPath) and os.path.isfile(indexPath):
+                # read the file, get the contexts and save it in the response dict
+                try:
+                    indexFile = open(indexPath)
+                    fileContents = indexFile.read()
+                    self.responseDict["body"] = fileContents
+                    indexFile.close()
+                    self.responseDict["return-code"] = "200 OK"
+                    self.responseDict["content-type"] = "Content-Type: text/html"
+                    return True
+                except:
+                    return False
+            else: # the file doesnt exsist, need to return the proper error code and return
                 return False
 
     def checkPath(self, path, basePath):
