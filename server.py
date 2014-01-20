@@ -29,31 +29,6 @@ import SocketServer
 # try: curl -v -X GET http://127.0.0.1:8080/
 
 
-# Example of a HTTP request
-'''
-GET /path/file.html HTTP/1.0
-From: someuser@jmarshall.com
-User-Agent: HTTPTool/1.0
-[blank line here]
-'''
-# and an exmaple of a HTTP response
-'''
-HTTP/1.0 200 OK
-Date: Fri, 31 Dec 1999 23:59:59 GMT
-Content-Type: text/html
-Content-Length: 1354
-
-<html>
-<body>
-<h1>Happy New Millennium!</h1>
-(more file contents)
-  .
-    .
-      .
-</body>
-</html>
-'''
-
 HTTP_VERSION = "HTTP/1.1"
 END_LINE = "\r\n"
 
@@ -62,10 +37,7 @@ class MyWebServer(SocketServer.BaseRequestHandler):
     def handle(self):
         self.responseDict = {}
         self.data = self.request.recv(1024).strip()
-        print ("Got a request")
         lines = self.data.splitlines()
-        for line in lines:
-            print (line)
         requestHeader = lines[0]
         tokens = requestHeader.split(" ")
         path = tokens[1]
@@ -79,101 +51,37 @@ class MyWebServer(SocketServer.BaseRequestHandler):
     def generateResponseFromPath(self, path):
 
         wwwDirPath = os.path.join(os.getcwd(), "www")
-	"""
-        if path.endswith('/'): # this could probably be changed to "endswith" and cover more cases
-            # This is a directory, so we need to serve index.html from this directory if it exists
-            if path == '/':
-                # Not needed, the one in the else works for all
-                indexPath = os.path.join(wwwDirPath, "index.html")
-            else:
-                indexPath = os.path.join(wwwDirPath, path.lstrip('/'), "index.html")
-            if not self.checkPath(indexPath, wwwDirPath):
-                print "Found out the path doesnt exist, or its trying to access something it should be"
-                return False
-            if os.path.exists(indexPath) and os.path.isfile(indexPath):
-                # read the file, get the contexts and save it in the response dict
-                try:
-                    indexFile = open(indexPath)
-                    fileContents = indexFile.read()
-                    self.responseDict["body"] = fileContents
-                    indexFile.close()
-                    self.responseDict["return-code"] = "200 OK"
-                    self.responseDict["content-type"] = "Content-Type: text/html"
-                    return True
-                except:
-                    return False
-            else: # the file doesnt exsist, need to return the proper error code and return
-                return False
-        # now we know we arent dealing with a directory, so it much be a file (if it is in fact a valid url)
-	"""
+
         if path.endswith(".html"):
-            print "detected a .html file"
-            print "wwwDirPath: %s" % wwwDirPath
-            print "path: %s" % path
             htmlPath = os.path.join(wwwDirPath, path.lstrip('/'))
-            print "html path file path is: %s" % htmlPath
-            if not self.checkPath(htmlPath, wwwDirPath):
-                return False
             if os.path.exists(htmlPath) and os.path.isfile(htmlPath):
-                # read the file, get the contexts and save it in the response dict
-                try:
-                    htmlFile = open(htmlPath)
-                    fileContents = htmlFile.read()
+                fileContents = self.readFileContents(htmlPath)
+                if fileContents:
                     self.responseDict["body"] = fileContents
-                    htmlFile.close()
                     self.responseDict["return-code"] = "200 OK"
                     self.responseDict["content-type"] = "Content-Type: text/html"
                     return True
-                except:
-                    return False
-            else: # html file doesnt exsist, need to return proper error code
-                return False
+            return False
         elif path.endswith(".css"):
-            print "detected a .css file"
-            print "wwwDirPath: %s" % wwwDirPath
-            print "path: %s" % path
             cssPath = os.path.join(wwwDirPath, path.lstrip('/'))
-            print "css path file path is: %s" % cssPath
-            if not self.checkPath(cssPath, wwwDirPath):
-                return False
             if os.path.exists(cssPath) and os.path.isfile(cssPath):
-                # read the file, get the contexts and save it in the response dict
-                try:
-                    cssFile = open(cssPath)
-                    fileContents = cssFile.read()
+                fileContents = self.readFileContents(cssPath)
+                if fileContents:
                     self.responseDict["body"] = fileContents
-                    cssFile.close()
                     self.responseDict["return-code"] = "200 OK"
                     self.responseDict["content-type"] = "Content-Type: text/css"
                     return True
-                except:
-                    return False
-            else: # css file doesnt exsist, need to return proper error code
-                return False
-        # we have enhaused what our server can provide, need to return a failed request back to the client
-	# TODO onc last case to catch. Need to handle the case of http://127.0.0.1:8080/deep without the trailing '/'
-	# supposed to serve the index.html from that directory
+            return False
         else:
             indexPath = os.path.join(wwwDirPath, path.lstrip('/'), "index.html")
             if os.path.exists(indexPath) and os.path.isfile(indexPath):
-                # read the file, get the contexts and save it in the response dict
-                try:
-                    indexFile = open(indexPath)
-                    fileContents = indexFile.read()
+                fileContents = self.readFileContents(indexPath)
+                if fileContents:
                     self.responseDict["body"] = fileContents
-                    indexFile.close()
                     self.responseDict["return-code"] = "200 OK"
                     self.responseDict["content-type"] = "Content-Type: text/html"
                     return True
-                except:
-                    return False
-            else: # the file doesnt exsist, need to return the proper error code and return
-                return False
-
-    def checkPath(self, path, basePath):
-        if os.path.abspath(path).startswith(basePath):
-            return True
-        return False
+            return False
 
     def readFileContents(self, filePath):
         """ Reads """
@@ -188,16 +96,6 @@ class MyWebServer(SocketServer.BaseRequestHandler):
     def buildResponse(self):
         """
         using the response dict filled earlier build and return the http response
-
-        # form of a good http repsonse
-        httpResponse = ""
-        httpResponse += "HTTP/1.0 200 OK\r\n"
-        httpResponse += "HTTP/1.0 404\r\n"
-        httpResponse += "Date: Fri, 31 Dec 1999 23:59:59 GMT\r\n"
-        httpResponse += "Content-Type: text/css\r\n"
-        httpResponse += "\r\n"
-        print httpResponse
-        self.request.sendall(httpResponse)
         """
         httpResponse = ""
         httpResponse += HTTP_VERSION
@@ -208,19 +106,18 @@ class MyWebServer(SocketServer.BaseRequestHandler):
         httpResponse += END_LINE
         httpResponse += END_LINE
         httpResponse += self.responseDict["body"]
-        print "http reponse"
-        print httpResponse
         return httpResponse
 
     def build404(self):
+        """
+        """
         httpResponse = ""
         httpResponse += HTTP_VERSION
         httpResponse += " "
         httpResponse += "404 Not Found"
         httpResponse += END_LINE
         httpResponse += END_LINE
-        print "http reponse"
-        print httpResponse
+        httpResponse += "404 Not Found"
         return httpResponse
 
 
