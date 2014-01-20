@@ -93,9 +93,11 @@ class MyWebServer(SocketServer.BaseRequestHandler):
 
         wwwDirPath = os.path.join(os.getcwd(), "www")
         # first need to check the path
+        # MOVE this to the bottom as an else
         if path.endswith('/'): # this could probably be changed to "endswith" and cover more cases
             # This is a directory, so we need to serve index.html from this directory if it exists
             if path == '/':
+                # Not needed, the one in the else works for all
                 indexPath = os.path.join(wwwDirPath, "index.html")
             else:
                 indexPath = os.path.join(wwwDirPath, path.lstrip('/'), "index.html")
@@ -165,12 +167,30 @@ class MyWebServer(SocketServer.BaseRequestHandler):
 	# TODO onc last case to catch. Need to handle the case of http://127.0.0.1:8080/deep without the trailing '/'
 	# supposed to serve the index.html from that directory
         else:
-            return False
+            # means one of two things. Either the path leads to a directory
+            filePath = os.path.join(wwwDirPath, path.lstrip('/'))
+            if os.path.exists(filePath) and os.path.isDirectory(filePath):
+                # serve the index.html from this file
+                pass
+            # OR
+            # it doesn't exist and we should 404
+            else:
+                return False
 
     def checkPath(self, path, basePath):
         if os.path.abspath(path).startswith(basePath):
             return True
         return False
+
+    def readFileContents(self, filePath):
+        """ Reads """
+        try:
+            openFile = open(filePath)
+            fileContents = openFile.read()
+            openFile.close()
+            return fileContents
+        except:
+            return False
 
     def buildResponse(self):
         """
